@@ -93,12 +93,12 @@ Call the demo MVP-ready only when all applicable items below are shown and docum
 
 ## Git and handoff workflow
 
-The project already contains a local `.git` directory but currently has no commit and no remote. To publish it, the owner should create a private repository and provide its clone URL, then explicitly authorize the initial commit and push. Before that first commit:
+The source repository is public at [github.com/MR-PARADOX-13/MetaGuardRail](https://github.com/MR-PARADOX-13/MetaGuardRail), with `main` as its default branch. To onboard, clone the repository and open its root folder in Android Studio. For ongoing work:
 
-1. Review `git status` and inspect every staged file. Keep source, Gradle wrapper/configuration, necessary licensed model assets, and documentation.
-2. Remove machine-specific IDE state from the index if it is already staged; `.gitignore` only prevents future additions and does not unstage existing files.
-3. Confirm `local.properties`, generated APKs/AABs, build/cache folders, signing keys, and credentials are excluded.
-4. Create the first commit with a clear message, add the agreed remote, and push the agreed branch. Keep the repository private unless the owner chooses public visibility.
-5. For ongoing work, create a short-lived branch per feature, keep commits focused, and open a pull request with the behavior changed, device tested, permissions involved, and detector evaluation results.
+1. Create a short-lived branch for each feature or fix; do not commit directly to `main`.
+2. Keep commits focused and run the relevant build or manual device checks before opening a pull request.
+3. In the pull request, describe the behavior changed, device and Android version tested, permissions involved, and detector evaluation results.
+4. Keep `local.properties`, generated APKs/AABs, build/cache folders, signing keys, credentials, and machine-specific Android Studio settings out of commits. The `.gitignore` covers these; review `git status` before committing.
+5. The repository contains source and licensed model assets, not generated APKs. Build an APK locally with `./gradlew :app:assembleDebug`; use a GitHub Release for any APK distribution rather than adding binaries to Git history.
 
 Do not place Git credentials, access tokens, keystore passwords, or signing files in source code, Gradle files, project properties, chat, or commits.
