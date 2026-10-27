@@ -1,0 +1,17 @@
+Speech model notice
+
+Speech models are downloaded over HTTPS on first use and stored in app-private storage. They are
+not bundled in the APK. Both models are from Alpha Cephei Inc. and are listed under the Apache
+License 2.0 on the official Vosk model page. See VOSK-LICENSE.txt.
+
+Model page: https://alphacephei.com/vosk/models
+Model metadata copyright: Copyright 2020 Alpha Cephei Inc
+
+The English model archive is about 40 MB. The Telugu model archive is about 58 MB. Both models
+remain on the device for offline use after download.
+
+The Telugu model's published Fleurs benchmark reports an 87.9 word error rate; Telugu playback
+detection is experimental and may miss speech.
+
+English model: https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+Telugu model: https://alphacephei.com/vosk/models/vosk-model-small-te-0.42.zip
