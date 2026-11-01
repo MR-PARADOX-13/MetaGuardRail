@@ -19,14 +19,14 @@ object LiveProtectionState {
         mutableState.value = LiveProtectionStatus(message = "Starting the approved screen check…")
     }
 
-    fun running(message: String = "Checking text and sampled images in Instagram and Facebook") {
+    fun running(message: String = "Checking text and sampled images in Instagram, Facebook, and Chrome") {
         mutableState.value = mutableState.value.copy(isRunning = true, message = message)
     }
 
     fun waitingForSocialApp() {
         mutableState.value = LiveProtectionStatus(
             isRunning = true,
-            message = "Waiting for Instagram or Facebook"
+            message = "Waiting for Instagram, Facebook, or Chrome"
         )
     }
 

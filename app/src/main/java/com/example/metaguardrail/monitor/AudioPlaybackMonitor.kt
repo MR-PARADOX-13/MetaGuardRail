@@ -1,17 +1,17 @@
 package com.example.metaguardrail.monitor
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.os.Build
 import android.util.Log
-import org.json.JSONObject
-import org.vosk.Model
-import org.vosk.Recognizer
+import androidx.core.content.ContextCompat
 import com.example.metaguardrail.data.SpeechLanguage
 import java.io.BufferedInputStream
 import java.io.File
@@ -19,6 +19,9 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.zip.ZipInputStream
+import org.json.JSONObject
+import org.vosk.Model
+import org.vosk.Recognizer
 
 /** Transcribes capturable Meta-app playback locally; does not use the room microphone. */
 class AudioPlaybackMonitor(
@@ -54,6 +57,10 @@ class AudioPlaybackMonitor(
         try {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 onStatus("Audio playback checks need Android 10 or newer")
+                return
+            }
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                onStatus("Audio permission not granted; text and image checks continue")
                 return
             }
 
@@ -95,6 +102,7 @@ class AudioPlaybackMonitor(
             )
             if (minimumBufferSize <= 0) throw IllegalStateException("Playback audio format is unavailable")
 
+            @SuppressLint("MissingPermission")
             audioRecord = AudioRecord.Builder()
                 .setAudioFormat(audioFormat)
                 .setBufferSizeInBytes(minimumBufferSize * 2)

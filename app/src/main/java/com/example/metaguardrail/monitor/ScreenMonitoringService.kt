@@ -33,7 +33,10 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import com.example.metaguardrail.MainActivity
 import com.example.metaguardrail.R
+import com.example.metaguardrail.ai.BackendProxyConfig
+import com.example.metaguardrail.ai.MuseSparkRepository
 import com.example.metaguardrail.data.ContentSafetyAnalyzer
 import com.example.metaguardrail.data.SafetyCategory
 import com.example.metaguardrail.data.SafetySettings
@@ -42,6 +45,11 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /** User-started screen text scan. Frames are processed on-device and are not saved. */
 class ScreenMonitoringService : Service() {
@@ -70,10 +78,47 @@ class ScreenMonitoringService : Service() {
     private var audioFinding: String? = null
     private var audioEnabled = false
     private var speechLanguage = SpeechLanguage.ENGLISH
+    @Volatile private var cloudTextAnalysisEnabled = false
+
+    private val seenContentHashes = mutableMapOf<String, Long>() // hash -> timestamp
+    private val videoFrameSampler = VideoFrameSampler()
+    private var lastMuseCallAt = 0L
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var museFinding: String? = null
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
             finishSession("Screen sharing was stopped")
+        }
+    }
+
+    // Note: rotation / config changes trigger new ImageReader size handling — VirtualDisplay is recreated
+    // on next startCapture(). Current session continues with existing metrics; rotation while active
+    // will be handled on next service restart or by system recreating the projection.
+
+    private fun contentHash(ocrText: String, visualFlag: String?): String {
+        return "${ocrText.hashCode()}_${visualFlag}_${ocrText.length}"
+    }
+
+    private fun maybeAnalyzeWithMuse(text: String, settings: SafetySettings) {
+        if (!cloudTextAnalysisEnabled) return
+        if (!BackendProxyConfig.isBackendConfigured()) return
+        val now = System.currentTimeMillis()
+        if (now - lastMuseCallAt < 10_000) return // throttle 10s
+        lastMuseCallAt = now
+        serviceScope.launch {
+            try {
+                val svc = BackendProxyConfig.createMuseService()
+                val repo = MuseSparkRepository(svc, analyzer, isCloudTextAnalysisAllowed = { cloudTextAnalysisEnabled })
+                val res = repo.analyzeWithMuse(text.take(2000), settings)
+                if (res.isSuccess) {
+                    val m = res.getOrThrow()
+                    // Validate category allowlist already done, check shouldShield
+                    if (m.shouldShield || m.severity == "WARNING" || m.severity == "HIGH_RISK") {
+                        mainHandler.post { updateFinding("muse", m.category) }
+                    }
+                }
+            } catch (_: Exception) { }
         }
     }
 
@@ -107,6 +152,7 @@ class ScreenMonitoringService : Service() {
         )
         audioEnabled = intent?.getBooleanExtra(EXTRA_AUDIO_ENABLED, false) == true
         speechLanguage = SpeechLanguage.fromValue(intent?.getStringExtra(EXTRA_SPEECH_LANGUAGE))
+        cloudTextAnalysisEnabled = intent?.getBooleanExtra(EXTRA_CLOUD_TEXT_ANALYSIS_ENABLED, false) == true
 
         startForegroundForCapture()
         try {
@@ -180,7 +226,7 @@ class ScreenMonitoringService : Service() {
             audioMonitor = AudioPlaybackMonitor(
                 context = applicationContext,
                 projection = projection!!,
-                targetPackageNames = SOCIAL_APP_PACKAGES,
+                targetPackageNames = AUDIO_CAPTURE_PACKAGES,
                 speechLanguage = speechLanguage,
                 onTranscript = ::checkSpeechTranscript,
                 onStatus = { message -> mainHandler.post { LiveProtectionState.running(message) } }
@@ -212,11 +258,12 @@ class ScreenMonitoringService : Service() {
         if (image == null) return
         val now = System.currentTimeMillis()
         if (shieldIsVisible) {
-            if (currentForegroundPackage(now) !in SOCIAL_APP_PACKAGES) {
+            if (currentForegroundPackage(now) !in SCREEN_MONITORED_PACKAGES) {
                 mainHandler.post {
                     textFinding = null
                     visualFinding = null
                     audioFinding = null
+                    museFinding = null
                     hideWarning()
                     LiveProtectionState.waitingForSocialApp()
                 }
@@ -230,12 +277,14 @@ class ScreenMonitoringService : Service() {
         }
         lastAnalysisAt = now
         val packageName = currentForegroundPackage(now)
-        if (packageName !in SOCIAL_APP_PACKAGES) {
+        if (packageName !in SCREEN_MONITORED_PACKAGES) {
             cleanFrameCount = 0
+            videoFrameSampler.reset()
             mainHandler.post {
                 textFinding = null
                 visualFinding = null
                 audioFinding = null
+                museFinding = null
                 hideWarning()
                 LiveProtectionState.waitingForSocialApp()
             }
@@ -244,17 +293,25 @@ class ScreenMonitoringService : Service() {
         }
 
         isProcessingFrame = true
+        var bitmapOwnedByAsync = false
+        var asyncBitmap: Bitmap? = null
         try {
             val bitmap = imageToBitmap(image)
-            image.close()
+            try { image.close() } catch (_: Exception) {}
             if (bitmap == null) {
                 isProcessingFrame = false
                 return
             }
+            asyncBitmap = bitmap
+            bitmapOwnedByAsync = true
+            // Visual classifier is additionally throttled for video/Reels via VideoFrameSampler (3s).
+            // We keep existing FRAME_INTERVAL_MS as primary throttle; VideoFrameSampler provides extra
+            // sampling gate if needed for future video-specific logic. Preserving behavior for now.
+            val shouldRunVisual = settings.enabledCategories.contains(SafetyCategory.ADULT_CONTENT)
+            // Record sampling edge for future video frame gating (no-op if not used)
+            // videoFrameSampler.shouldSample(now) could be used to gate heavy inference
             visualFinding = try {
-                if (settings.enabledCategories.contains(SafetyCategory.ADULT_CONTENT) &&
-                    visualClassifier?.possibleAdultImage(bitmap) == true
-                ) {
+                if (shouldRunVisual && visualClassifier?.possibleAdultImage(bitmap) == true) {
                     "sexual or suggestive imagery"
                 } else {
                     null
@@ -268,7 +325,9 @@ class ScreenMonitoringService : Service() {
             }
             val textRecognizer = recognizer
             if (textRecognizer == null) {
-                bitmap.recycle()
+                try { bitmap.recycle() } catch (_: Exception) {}
+                asyncBitmap = null
+                bitmapOwnedByAsync = false
                 isProcessingFrame = false
                 return
             }
@@ -279,10 +338,37 @@ class ScreenMonitoringService : Service() {
             }
             textRecognizer.process(InputImage.fromBitmap(bitmap, 0))
                 .addOnSuccessListener { recognized ->
-                    val result = analyzer.analyzeContent(
-                        listOf(recognized.text, teluguText).filter(String::isNotBlank).joinToString("\n"),
-                        settings
-                    )
+                    val combinedText = listOf(recognized.text, teluguText).filter(String::isNotBlank).joinToString("\n")
+                    // --- Deduplication: compute hash after OCR + visual flag ---
+                    val hash = contentHash(combinedText, imageFindingForFrame)
+                    val nowMs = System.currentTimeMillis()
+                    // Prune entries older than 60s
+                    val iterator = seenContentHashes.entries.iterator()
+                    while (iterator.hasNext()) {
+                        val entry = iterator.next()
+                        if (nowMs - entry.value > 60_000) {
+                            iterator.remove()
+                        }
+                    }
+                    // Check duplicate within 5s window: skip duplicate analysis
+                    val lastSeen = seenContentHashes[hash]
+                    if (lastSeen != null && nowMs - lastSeen < 5000) {
+                        // Duplicate frame — skip analysis; recycling handled in onComplete
+                        return@addOnSuccessListener
+                    }
+                    seenContentHashes[hash] = nowMs
+                    if (seenContentHashes.size > 100) {
+                        // Evict eldest entry (first key) — insertion-order approximation
+                        val eldestKey = seenContentHashes.keys.firstOrNull()
+                        if (eldestKey != null) seenContentHashes.remove(eldestKey)
+                    }
+
+                    // Optional remote Muse analysis (throttled 10s)
+                    if (combinedText.isNotBlank()) {
+                        maybeAnalyzeWithMuse(combinedText, settings)
+                    }
+
+                    val result = analyzer.analyzeContent(combinedText, settings)
                     if (result.isFlagged) {
                         cleanFrameCount = 0
                         val category = result.categoryMatched?.label ?: "safety concern"
@@ -297,6 +383,10 @@ class ScreenMonitoringService : Service() {
                             if (cleanFrameCount >= CLEAN_FRAMES_TO_CLEAR) {
                                 mainHandler.post {
                                     updateFinding("text", null)
+                                    // Also clear muse if visual is also clear — sustained clean frames
+                                    if (visualFinding == null) {
+                                        updateFinding("muse", null)
+                                    }
                                 }
                             }
                         }
@@ -308,35 +398,72 @@ class ScreenMonitoringService : Service() {
                     }
                 }
                 .addOnCompleteListener {
-                    bitmap.recycle()
+                    try { bitmap.recycle() } catch (_: Exception) {}
                     isProcessingFrame = false
                 }
+            // Async path now owns bitmap and will recycle + reset isProcessingFrame in onComplete
+            return
         } catch (_: Exception) {
-            image.close()
-            isProcessingFrame = false
+            try { image.close() } catch (_: Exception) {}
+            if (bitmapOwnedByAsync) {
+                // async path owns recycle; do not double-recycle here, but ensure flag reset on exception before listener attached
+                // If exception occurred before listeners attached, we must cleanup
+                try { asyncBitmap?.recycle() } catch (_: Exception) {}
+                isProcessingFrame = false
+            } else {
+                isProcessingFrame = false
+            }
         }
     }
 
     private fun imageToBitmap(image: Image): Bitmap? {
         val plane = image.planes.firstOrNull() ?: return null
-        val paddingPixels = (plane.rowStride - plane.pixelStride * image.width) / plane.pixelStride
-        val paddedWidth = image.width + paddingPixels
-        val padded = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
-        plane.buffer.rewind()
-        padded.copyPixelsFromBuffer(plane.buffer)
-        val cropped = if (paddedWidth == image.width) {
-            padded
-        } else {
-            Bitmap.createBitmap(padded, 0, 0, image.width, image.height).also { padded.recycle() }
+        var padded: Bitmap? = null
+        var cropped: Bitmap? = null
+        try {
+            val paddingPixels = (plane.rowStride - plane.pixelStride * image.width) / plane.pixelStride
+            val paddedWidth = image.width + paddingPixels
+            padded = Bitmap.createBitmap(paddedWidth, image.height, Bitmap.Config.ARGB_8888)
+            plane.buffer.rewind()
+            padded.copyPixelsFromBuffer(plane.buffer)
+            cropped = if (paddedWidth == image.width) {
+                padded
+            } else {
+                Bitmap.createBitmap(padded, 0, 0, image.width, image.height).also {
+                    try { padded.recycle() } catch (_: Exception) {}
+                    padded = null
+                }
+            }
+            val widthForScale = cropped.width
+            val scale = minOf(1f, MAX_ANALYSIS_WIDTH.toFloat() / widthForScale)
+            if (scale >= 1f) {
+                val result = cropped
+                // Prevent finally from recycling the returned bitmap
+                cropped = null
+                padded = null
+                return result
+            }
+            val scaled = Bitmap.createScaledBitmap(
+                cropped,
+                (cropped.width * scale).toInt().coerceAtLeast(1),
+                (cropped.height * scale).toInt().coerceAtLeast(1),
+                true
+            )
+            try { cropped.recycle() } catch (_: Exception) {}
+            cropped = null
+            padded = null
+            return scaled
+        } catch (_: Exception) {
+            try { cropped?.recycle() } catch (_: Exception) {}
+            // Only recycle padded if it's distinct from cropped (already handled)
+            if (padded != null && padded != cropped) {
+                try { padded.recycle() } catch (_: Exception) {}
+            }
+            return null
+        } finally {
+            // Early returns already nullified references to avoid double-recycle.
+            // Any remaining non-returned bitmaps that leaked due to exception path are handled above.
         }
-        val scale = minOf(1f, MAX_ANALYSIS_WIDTH.toFloat() / cropped.width)
-        if (scale >= 1f) return cropped
-        return Bitmap.createScaledBitmap(
-            cropped,
-            (cropped.width * scale).toInt().coerceAtLeast(1),
-            (cropped.height * scale).toInt().coerceAtLeast(1),
-            true
-        ).also { cropped.recycle() }
     }
 
     private fun currentForegroundPackage(now: Long): String? {
@@ -359,20 +486,72 @@ class ScreenMonitoringService : Service() {
     }
 
     private fun showWarning(category: String) {
-        if (!Settings.canDrawOverlays(this)) return
-        if (System.currentTimeMillis() < shieldSuppressedUntil) return
-        val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        val existingView = warningView
-        if (existingView != null) {
+        if (!Settings.canDrawOverlays(this)) {
+            mainHandler.post { LiveProtectionState.running("Overlay permission revoked — please re-enable display over other apps") }
             return
         }
+        if (System.currentTimeMillis() < shieldSuppressedUntil) return
+        val windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        if (warningView != null) {
+            return
+        }
+        val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            overlayType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        }
+        val view: View = try {
+            WarningOverlayView.create(
+                context = this,
+                category = category,
+                onSnooze = { showScreenTemporarily() },
+                onExitHome = { exitToHomeScreen() },
+                onOpenSettings = {
+                    try {
+                        val settingsIntent = Intent(this, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(settingsIntent)
+                    } catch (_: Exception) {
+                        showScreenTemporarily()
+                    }
+                }
+            )
+        } catch (_: Exception) {
+            // Fallback to inline view creation if WarningOverlayView fails
+            createFallbackWarningView(category)
+        }
+        try {
+            windowManager.addView(view, params)
+            warningView = view
+            shieldIsVisible = true
+        } catch (_: SecurityException) {
+            warningView = null
+            shieldIsVisible = false
+            mainHandler.post { LiveProtectionState.running("Overlay permission revoked — please re-enable display over other apps") }
+        } catch (_: Exception) {
+            warningView = null
+            shieldIsVisible = false
+        }
+    }
+
+    private fun createFallbackWarningView(category: String): View {
         val guidance = if (category.contains("self-harm", ignoreCase = true)) {
             "If this may be about you, reach out to someone you trust or local crisis support. If anyone is in immediate danger, contact local emergency services."
         } else {
             "A possible $category was found in Instagram or Facebook. This automated check can be wrong."
         }
-
-        val view = LinearLayout(this).apply {
+        return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(28), dp(36), dp(28), dp(36))
@@ -410,29 +589,6 @@ class ScreenMonitoringService : Service() {
                 setOnClickListener { exitToHomeScreen() }
             }, fullWidthWrap().apply { topMargin = dp(8) })
         }
-        val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            overlayType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        }
-        try {
-            windowManager.addView(view, params)
-            warningView = view
-            shieldIsVisible = true
-        } catch (_: Exception) {
-            warningView = null
-            shieldIsVisible = false
-        }
     }
 
     private fun fullWidthWrap(): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
@@ -469,7 +625,7 @@ class ScreenMonitoringService : Service() {
     }
 
     private fun checkSpeechTranscript(text: String) {
-        if (foregroundPackage !in SOCIAL_APP_PACKAGES) return
+        if (foregroundPackage !in AUDIO_CAPTURE_PACKAGES) return
         val result = analyzer.analyzeContent(text, settings)
         val category = if (result.isFlagged) {
             result.categoryMatched?.label ?: "safety concern"
@@ -485,9 +641,11 @@ class ScreenMonitoringService : Service() {
             "text" -> textFinding = category
             "image" -> visualFinding = category
             "audio" -> audioFinding = category
+            "muse" -> museFinding = category
         }
         val activeFinding = when {
             visualFinding != null -> visualFinding to "image check"
+            museFinding != null -> museFinding to "AI review"
             textFinding != null -> textFinding to "visible text"
             audioFinding != null -> audioFinding to "speech transcript"
             else -> null
@@ -508,6 +666,7 @@ class ScreenMonitoringService : Service() {
         if (isFinishing) return
         isFinishing = true
         hideWarning()
+        serviceScope.cancel()
         imageReader?.setOnImageAvailableListener(null, null)
         virtualDisplay?.release()
         virtualDisplay = null
@@ -533,6 +692,7 @@ class ScreenMonitoringService : Service() {
 
     override fun onDestroy() {
         if (!isFinishing) finishSession("Automatic checking is off")
+        try { serviceScope.cancel() } catch (_: Exception) {}
         super.onDestroy()
     }
 
@@ -543,6 +703,7 @@ class ScreenMonitoringService : Service() {
         const val EXTRA_ENABLED_CATEGORIES = "enabled_categories"
         const val EXTRA_AUDIO_ENABLED = "audio_playback_enabled"
         const val EXTRA_SPEECH_LANGUAGE = "speech_language"
+        const val EXTRA_CLOUD_TEXT_ANALYSIS_ENABLED = "cloud_text_analysis_enabled"
 
         private const val NOTIFICATION_ID = 401
         private const val STOP_REQUEST_CODE = 402
@@ -551,7 +712,13 @@ class ScreenMonitoringService : Service() {
         private const val INITIAL_USAGE_LOOKBACK_MS = 24 * 60 * 60 * 1000L
         private const val CLEAN_FRAMES_TO_CLEAR = 3
         private const val SHIELD_SNOOZE_MS = 8_000L
-        private val SOCIAL_APP_PACKAGES = setOf(
+        private val SCREEN_MONITORED_PACKAGES = setOf(
+            "com.instagram.android",
+            "com.facebook.katana",
+            "com.facebook.lite",
+            "com.android.chrome"
+        )
+        private val AUDIO_CAPTURE_PACKAGES = setOf(
             "com.instagram.android",
             "com.facebook.katana",
             "com.facebook.lite"
