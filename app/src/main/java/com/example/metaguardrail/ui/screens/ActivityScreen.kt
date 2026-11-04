@@ -11,18 +11,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,8 +37,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -43,26 +48,31 @@ import com.example.metaguardrail.data.ActivityEvent
 import com.example.metaguardrail.data.DetectionSource
 import com.example.metaguardrail.data.ReportExporter
 import com.example.metaguardrail.data.Severity as DataSeverity
-import com.example.metaguardrail.ui.components.GuardRailCard
-import com.example.metaguardrail.ui.components.GuardRailTopBar
-import com.example.metaguardrail.ui.components.SectionLabel
-import com.example.metaguardrail.ui.components.SeverityBadge
-import com.example.metaguardrail.ui.components.Severity as UiSeverity
+import com.example.metaguardrail.ui.components.neo.GuardRailCard
+import com.example.metaguardrail.ui.components.neo.GuardRailPrimaryButton
+import com.example.metaguardrail.ui.components.neo.GuardRailSecondaryButton
+import com.example.metaguardrail.ui.components.neo.GuardRailSectionHeader
+import com.example.metaguardrail.ui.components.neo.GuardRailStatusBadge
+import com.example.metaguardrail.ui.theme.BrutalistTokens
 import com.example.metaguardrail.ui.theme.GuardRailColors
 import java.util.concurrent.TimeUnit
 
-private fun DataSeverity.toUi(): UiSeverity = when (this) {
-    DataSeverity.SAFE -> UiSeverity.SAFE
-    DataSeverity.REVIEW -> UiSeverity.REVIEW
-    DataSeverity.WARNING -> UiSeverity.WARNING
-    DataSeverity.HIGH_RISK -> UiSeverity.HIGH_RISK
+private fun DataSeverity.toBadgeLabel(): String = when (this) {
+    DataSeverity.SAFE -> "SAFE"
+    DataSeverity.REVIEW -> "REVIEW"
+    DataSeverity.WARNING -> "WARNING"
+    DataSeverity.HIGH_RISK -> "HIGH RISK"
 }
-private fun severityBorderColor(sev: DataSeverity) = when (sev) {
-    DataSeverity.SAFE -> GuardRailColors.SafeBorder
-    DataSeverity.REVIEW -> GuardRailColors.ReviewBorder
-    DataSeverity.WARNING -> GuardRailColors.WarningBorder
-    DataSeverity.HIGH_RISK -> GuardRailColors.HighRiskBorder
+
+private fun DataSeverity.stripeColor(): Color = when (this) {
+    DataSeverity.SAFE -> GuardRailColors.BrutalMint // #BBF7D0
+    DataSeverity.REVIEW -> GuardRailColors.BrutalWarning // #FEF08A
+    DataSeverity.WARNING -> Color(0xFFFDBA74) // orange muted
+    DataSeverity.HIGH_RISK -> GuardRailColors.BrutalRisk // #FECACA
 }
+
+private fun DataSeverity.badgeColor(): Color = stripeColor()
+
 private fun formatTimeAgo(timestampMs: Long): String {
     val diff = System.currentTimeMillis() - timestampMs
     if (diff < 0) return "just now"
@@ -108,8 +118,8 @@ fun ActivityScreen(
     val filtered = remember(events, selectedSeverities, selectedCategories, selectedSources) {
         events.filter { ev ->
             (selectedSeverities.isEmpty() || ev.severity in selectedSeverities) &&
-            (selectedCategories.isEmpty() || ev.category in selectedCategories) &&
-            (selectedSources.isEmpty() || ev.source in selectedSources)
+                (selectedCategories.isEmpty() || ev.category in selectedCategories) &&
+                (selectedSources.isEmpty() || ev.source in selectedSources)
         }.sortedByDescending { it.timestampMs }
     }
     val listState = rememberLazyListState()
@@ -125,81 +135,175 @@ fun ActivityScreen(
             }
         }
     }
-    Column(modifier = Modifier.fillMaxSize().background(scheme.background)) {
-        GuardRailTopBar(title = "Activity", subtitle = "${events.size} events logged")
-        LazyColumn(modifier = Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item { SectionLabel(text = "Filter by severity") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GuardRailColors.BrutalBg)
+    ) {
+        // Brutalist top bar - thick outline bottom border + bold header
+        BrutalistTopBar(title = "Activity", subtitle = "${events.size} events logged")
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item { GuardRailSectionHeader(title = "Filter by severity") }
             item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     for (sev in DataSeverity.entries) {
                         val sel = sev in selectedSeverities
-                        FilterChip(selected = sel, onClick = { selectedSeverities = if (sel) selectedSeverities - sev else selectedSeverities + sev }, label = { Text(text = sev.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = when (sev) { DataSeverity.SAFE -> GuardRailColors.SafeMuted; DataSeverity.REVIEW -> GuardRailColors.ReviewMuted; DataSeverity.WARNING -> GuardRailColors.WarningMuted; DataSeverity.HIGH_RISK -> GuardRailColors.HighRiskMuted },
-                                selectedLabelColor = when (sev) { DataSeverity.SAFE -> GuardRailColors.Safe; DataSeverity.REVIEW -> GuardRailColors.Review; DataSeverity.WARNING -> GuardRailColors.Warning; DataSeverity.HIGH_RISK -> GuardRailColors.HighRisk }))
+                        BrutalFilterChip(
+                            label = sev.label,
+                            selected = sel,
+                            onClick = { selectedSeverities = if (sel) selectedSeverities - sev else selectedSeverities + sev },
+                            selectedColor = when (sev) {
+                                DataSeverity.SAFE -> GuardRailColors.BrutalMint
+                                DataSeverity.REVIEW -> GuardRailColors.BrutalWarning
+                                DataSeverity.WARNING -> Color(0xFFFDBA74)
+                                DataSeverity.HIGH_RISK -> GuardRailColors.BrutalRisk
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
             if (allCategories.isNotEmpty()) {
-                item { SectionLabel(text = "Filter by category") }
+                item { GuardRailSectionHeader(title = "Filter by category") }
                 item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         for (cat in allCategories) {
                             val sel = cat in selectedCategories
-                            FilterChip(selected = sel, onClick = { selectedCategories = if (sel) selectedCategories - cat else selectedCategories + cat }, label = { Text(text = cat, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) })
+                            BrutalFilterChip(
+                                label = cat,
+                                selected = sel,
+                                onClick = { selectedCategories = if (sel) selectedCategories - cat else selectedCategories + cat },
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
                         }
                     }
                 }
             }
             if (allSources.isNotEmpty()) {
-                item { SectionLabel(text = "Filter by detection source") }
+                item { GuardRailSectionHeader(title = "Filter by detection source") }
                 item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         for (src in allSources) {
                             val sel = src in selectedSources
-                            FilterChip(selected = sel, onClick = { selectedSources = if (sel) selectedSources - src else selectedSources + src }, label = { Text(text = src.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) })
+                            BrutalFilterChip(
+                                label = src.label,
+                                selected = sel,
+                                onClick = { selectedSources = if (sel) selectedSources - src else selectedSources + src },
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
                         }
                     }
                 }
             }
             if (events.isNotEmpty()) {
                 item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = { confirmClear = true }, modifier = Modifier.weight(1f)) { Text("Clear activity") }
-                        OutlinedButton(onClick = { exportLauncher.launch(ReportExporter.suggestedFileName()) }, modifier = Modifier.weight(1f)) { Text("Export JSON", fontSize = 12.sp) }
-                        OutlinedButton(onClick = { confirmShare = true }, modifier = Modifier.weight(1f)) { Text("Share", fontSize = 12.sp) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        GuardRailSecondaryButton(
+                            text = "Clear",
+                            onClick = { confirmClear = true },
+                            modifier = Modifier.weight(1f)
+                        )
+                        GuardRailPrimaryButton(
+                            text = "Export JSON",
+                            onClick = { exportLauncher.launch(ReportExporter.suggestedFileName()) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        GuardRailSecondaryButton(
+                            text = "Share",
+                            onClick = { confirmShare = true },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
             if (filtered.isEmpty()) {
                 item {
-                    GuardRailCard {
-                        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = if (events.isEmpty()) "No events yet" else "No matching events", color = scheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text(text = if (events.isEmpty()) "Run a check in Analyze or enable live protection to log events." else "Adjust filters to see more events.", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, lineHeight = 16.sp)
-                        }
-                    }
+                    BrutalistEmptyState(isNoEvents = events.isEmpty())
                 }
             } else {
-                items(filtered, key = { it.id }) { event -> ActivityCard(event = event, onClick = { detailEvent = event }) }
+                itemsIndexed(filtered, key = { _, it -> it.id }) { index, event ->
+                    TimelineEventRow(
+                        event = event,
+                        isFirst = index == 0,
+                        isLast = index == filtered.lastIndex,
+                        onClick = { detailEvent = event }
+                    )
+                }
             }
         }
     }
     if (detailEvent != null) {
         val ev = detailEvent!!
-        AlertDialog(onDismissRequest = { detailEvent = null }, title = { Text(ev.title.ifBlank { ev.category }, fontWeight = FontWeight.SemiBold) },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Category: ${ev.category}", fontSize = 12.sp); Text("Severity: ${ev.severity.label}", fontSize = 12.sp); Text("Source: ${ev.source.label}", fontSize = 12.sp); if (ev.confidence != null) Text("Confidence: ${(ev.confidence * 100).toInt()}% (threshold varies by category)", fontSize = 12.sp); if (ev.explanation.isNotBlank()) Text(ev.explanation, style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp); if (!ev.classificationMethod.isNullOrBlank()) Text("Method: ${ev.classificationMethod}" + (ev.modelVersion?.let { " ($it)" } ?: ""), fontSize = 11.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant) } },
-            confirmButton = { TextButton(onClick = { detailEvent = null }) { Text("Close") } })
+        AlertDialog(
+            onDismissRequest = { detailEvent = null },
+            title = { Text(ev.title.ifBlank { ev.category }, fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Category: ${ev.category}", fontSize = 12.sp)
+                    Text("Severity: ${ev.severity.label}", fontSize = 12.sp)
+                    Text("Source: ${ev.source.label}", fontSize = 12.sp)
+                    if (ev.confidence != null) Text(
+                        "Confidence: ${(ev.confidence * 100).toInt()}% (threshold varies by category)",
+                        fontSize = 12.sp
+                    )
+                    if (ev.explanation.isNotBlank()) Text(
+                        ev.explanation,
+                        style = MaterialTheme.typography.bodySmall,
+                        lineHeight = 18.sp
+                    )
+                    if (!ev.classificationMethod.isNullOrBlank()) Text(
+                        "Method: ${ev.classificationMethod}" + (ev.modelVersion?.let { " ($it)" } ?: ""),
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { detailEvent = null }) { Text("Close") } }
+        )
     }
     if (confirmClear) {
-        AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("Clear activity history?") }, text = { Text("Incident records will be deleted. This cannot be undone. Safety preferences and custom categories are not affected.", style = MaterialTheme.typography.bodySmall) },
-            confirmButton = { TextButton(onClick = { confirmClear = false; onClear() }) { Text("Clear") } }, dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } })
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Clear activity history?", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Text(
+                    "Incident records will be deleted. This cannot be undone. Safety preferences and custom categories are not affected.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirmClear = false; onClear() }) { Text("Clear") } },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } }
+        )
     }
     if (confirmShare) {
         AlertDialog(
             onDismissRequest = { confirmShare = false },
-            title = { Text("Share activity report?", fontWeight = FontWeight.SemiBold) },
-            text = { Text("This report contains user-derived text and safety labels from your activity history. Only share with someone you trust. The recipient will be able to see the content of flagged events.", style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp) },
+            title = { Text("Share activity report?", fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Text(
+                    "This report contains user-derived text and safety labels from your activity history. Only share with someone you trust. The recipient will be able to see the content of flagged events.",
+                    style = MaterialTheme.typography.bodySmall,
+                    lineHeight = 18.sp
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirmShare = false
@@ -221,23 +325,237 @@ fun ActivityScreen(
     }
 }
 
+// ── Brutalist header bar ──
 @Composable
-private fun ActivityCard(event: ActivityEvent, onClick: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    val borderColor = severityBorderColor(event.severity)
-    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(scheme.surface).border(1.dp, borderColor, RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(14.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = formatTimeAgo(event.timestampMs), color = scheme.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                SeverityBadge(severity = event.severity.toUi())
-            }
-            Text(text = event.title.ifBlank { event.category }, color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, lineHeight = 18.sp)
-            Text(text = "Category: ${event.category}", color = scheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 16.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(text = "Source: ${event.source.label}", color = scheme.onSurfaceVariant, fontSize = 11.sp)
-                if (event.confidence != null) Text(text = "Confidence: ${(event.confidence * 100).toInt()}%", color = scheme.onSurfaceVariant, fontSize = 11.sp)
-            }
-            if (event.explanation.isNotBlank()) Text(text = event.explanation, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp)
+private fun BrutalistTopBar(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .border(width = BrutalistTokens.BorderWidth, color = GuardRailColors.BrutalBlack)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black, letterSpacing = 0.5.sp),
+            color = GuardRailColors.BrutalBlack
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            color = GuardRailColors.BrutalMutedText
+        )
+    }
+}
+
+// ── Brutal pill filter chip ──
+@Composable
+private fun BrutalFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selectedColor: Color = GuardRailColors.BrutalPrimary
+) {
+    // Outer shadow + chip
+    Box(modifier = modifier.height(BrutalistTokens.MinTouchTarget)) {
+        // hard shadow
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .offset(x = 2.dp, y = 2.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(GuardRailColors.BrutalBlack)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(24.dp))
+                .background(if (selected) selectedColor else Color.White)
+                .border(BrutalistTokens.BorderWidth, GuardRailColors.BrutalBlack, RoundedCornerShape(24.dp))
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (selected) {
+                    // Use black text on light selected backgrounds, white on primary blue
+                    if (selectedColor == GuardRailColors.BrutalPrimary) Color.White else GuardRailColors.BrutalBlack
+                } else {
+                    GuardRailColors.BrutalBlack
+                },
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
         }
+    }
+}
+
+// ── Timeline row with vertical line + dot ──
+@Composable
+private fun TimelineEventRow(
+    event: ActivityEvent,
+    isFirst: Boolean,
+    isLast: Boolean,
+    onClick: () -> Unit
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        // Timeline gutter: vertical line + dot
+        Box(
+            modifier = Modifier
+                .width(20.dp)
+                .padding(top = 8.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            // Vertical line
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .height(96.dp)
+                    .background(GuardRailColors.BrutalBlack)
+                    .align(Alignment.TopCenter)
+            )
+            // Dot
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(event.severity.stripeColor())
+                    .border(2.dp, GuardRailColors.BrutalBlack, CircleShape)
+                    .align(Alignment.TopCenter)
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        BrutalistEventCard(event = event, onClick = onClick, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun BrutalistEventCard(
+    event: ActivityEvent,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    val stripe = event.severity.stripeColor()
+    // Hard shadow wrapper
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .offset(x = BrutalistTokens.ShadowOffset, y = BrutalistTokens.ShadowOffset)
+                .clip(RoundedCornerShape(BrutalistTokens.CornerRadius))
+                .background(GuardRailColors.BrutalBlack)
+        )
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(BrutalistTokens.CornerRadius))
+                .background(scheme.surface)
+                .border(BrutalistTokens.BorderWidth, GuardRailColors.BrutalBlack, RoundedCornerShape(BrutalistTokens.CornerRadius))
+                .clickable(onClick = onClick)
+        ) {
+            // Left severity stripe 4dp
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(120.dp)
+                    .background(stripe)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatTimeAgo(event.timestampMs),
+                        color = scheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    GuardRailStatusBadge(label = event.severity.toBadgeLabel(), color = event.severity.badgeColor())
+                }
+                Text(
+                    text = event.title.ifBlank { event.category },
+                    color = scheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = 18.sp
+                )
+                Text(
+                    text = "Category: ${event.category}",
+                    color = scheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Source: ${event.source.label}", color = scheme.onSurfaceVariant, fontSize = 11.sp)
+                    if (event.confidence != null) Text(
+                        text = "Confidence: ${(event.confidence * 100).toInt()}%",
+                        color = scheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
+                if (event.explanation.isNotBlank()) Text(
+                    text = event.explanation,
+                    color = scheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BrutalistEmptyState(isNoEvents: Boolean) {
+    GuardRailCard {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Icon placeholder: dashed brutal box with text
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(GuardRailColors.BrutalBg)
+                    .border(2.dp, GuardRailColors.BrutalBlack, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "◯", fontSize = 22.sp, fontWeight = FontWeight.Black, color = GuardRailColors.BrutalBlack)
+            }
+            Text(
+                text = if (isNoEvents) "No events yet" else "No matching events",
+                color = GuardRailColors.BrutalBlack,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+            )
+            Text(
+                text = if (isNoEvents) "Run a check in Analyze or enable live protection to log events." else "Adjust filters to see more events.",
+                color = GuardRailColors.BrutalMutedText,
+                style = MaterialTheme.typography.bodySmall,
+                lineHeight = 16.sp
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "ActivityScreen Light", widthDp = 400, heightDp = 900)
+@Composable
+private fun PreviewActivityScreen() {
+    com.example.metaguardrail.ui.theme.MetaGuardRailTheme(themeMode = com.example.metaguardrail.ui.theme.AppThemeMode.LIGHT) {
+        ActivityScreen(events = listOf(com.example.metaguardrail.data.ActivityEvent(title = "Flagged", category = "Scam", severity = com.example.metaguardrail.data.Severity.HIGH_RISK, source = com.example.metaguardrail.data.DetectionSource.LOCAL_RULE, explanation = "Preview")), onClear = {})
     }
 }

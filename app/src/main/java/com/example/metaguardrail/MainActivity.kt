@@ -15,13 +15,20 @@ import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,7 +41,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -203,24 +218,12 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     containerColor = scheme.background,
                     bottomBar = {
-                        NavigationBar(containerColor = scheme.surface, tonalElevation = 0.dp) {
-                            for ((idx, dest) in GuardRailDestination.entries.withIndex()) {
-                                val sel = selectedTabIndex == idx
-                                NavigationBarItem(
-                                    selected = sel,
-                                    onClick = { selectedTabIndex = idx },
-                                    icon = { Text(if (sel) "●" else "○", fontSize = 14.sp, color = if (sel) GuardRailColors.Primary else scheme.onSurfaceVariant) },
-                                    label = { Text(dest.label, fontSize = 10.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = GuardRailColors.Primary,
-                                        selectedTextColor = GuardRailColors.Primary,
-                                        indicatorColor = GuardRailColors.PrimaryMuted,
-                                        unselectedIconColor = scheme.onSurfaceVariant,
-                                        unselectedTextColor = scheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                        }
+                        BrutalistNavBar(
+                            destinations = GuardRailDestination.entries.toList(),
+                            selectedIndex = selectedTabIndex,
+                            onSelected = { idx: Int -> selectedTabIndex = idx },
+                            isDark = scheme.background == GuardRailColors.BrutalDarkBg || scheme.background == GuardRailColors.BrutalDarkSurface
+                        )
                     }
                 ) { padding ->
                     Box(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -315,5 +318,68 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_OPEN_INCIDENT = "com.example.metaguardrail.OPEN_INCIDENT"
         const val EXTRA_INCIDENT_ID = "incident_id"
+    }
+}
+
+// ── Brutalist Navigation Bar ──
+@Composable
+private fun BrutalistNavBar(
+    destinations: List<GuardRailDestination>,
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+    isDark: Boolean
+) {
+    val bgColor = if (isDark) GuardRailColors.BrutalDarkSurface else Color.White
+    val inactiveColor = if (isDark) GuardRailColors.BrutalDarkSecondaryText else Color(0xFF64748B)
+    val borderColor = GuardRailColors.BrutalBlack
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .background(bgColor)
+            // 2px top border in black
+            .border(width = 2.dp, color = borderColor)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for ((idx, dest) in destinations.withIndex()) {
+            val selected = idx == selectedIndex
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .defaultMinSize(minHeight = 48.dp, minWidth = 48.dp)
+                    .padding(horizontal = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (selected) Color(0xFF155EEF) else Color.Transparent)
+                    .then(if (selected) Modifier.border(2.dp, GuardRailColors.BrutalBlack, RoundedCornerShape(8.dp)) else Modifier)
+                    .clickable(
+                        onClick = { onSelected(idx) },
+                        role = Role.Tab
+                    )
+                    .semantics {
+                        this.selected = selected
+                        contentDescription = dest.label
+                        role = Role.Tab
+                    }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Text(
+                        text = if (selected) "●" else "○",
+                        fontSize = 12.sp,
+                        color = if (selected) Color.White else inactiveColor
+                    )
+                    Text(
+                        text = dest.label,
+                        fontSize = 9.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selected) Color.White else inactiveColor
+                    )
+                }
+            }
+        }
     }
 }
