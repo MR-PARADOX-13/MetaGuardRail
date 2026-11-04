@@ -188,7 +188,7 @@ fun ActivityScreen(
     if (detailEvent != null) {
         val ev = detailEvent!!
         AlertDialog(onDismissRequest = { detailEvent = null }, title = { Text(ev.title.ifBlank { ev.category }, fontWeight = FontWeight.SemiBold) },
-            text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Category: ${ev.category}", fontSize = 12.sp); Text("Severity: ${ev.severity.label}", fontSize = 12.sp); Text("Source: ${ev.source.label}", fontSize = 12.sp); if (ev.confidence != null) Text("Confidence: ${(ev.confidence * 100).toInt()}%", fontSize = 12.sp); if (ev.explanation.isNotBlank()) Text(ev.explanation, style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp) } },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Category: ${ev.category}", fontSize = 12.sp); Text("Severity: ${ev.severity.label}", fontSize = 12.sp); Text("Source: ${ev.source.label}", fontSize = 12.sp); if (ev.confidence != null) Text("Confidence: ${(ev.confidence * 100).toInt()}% (threshold varies by category)", fontSize = 12.sp); if (ev.explanation.isNotBlank()) Text(ev.explanation, style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp); if (!ev.classificationMethod.isNullOrBlank()) Text("Method: ${ev.classificationMethod}" + (ev.modelVersion?.let { " ($it)" } ?: ""), fontSize = 11.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant) } },
             confirmButton = { TextButton(onClick = { detailEvent = null }) { Text("Close") } })
     }
     if (confirmClear) {

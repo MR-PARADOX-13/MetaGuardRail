@@ -313,6 +313,48 @@ fun ImageSafetyCard(
                 color = Color(0xFF6B7A8A),
                 style = MaterialTheme.typography.labelSmall
             )
+            CloudViolenceSection(pickedUri = pickedUri)
+        }
+    }
+}
+
+@Composable
+private fun CloudViolenceSection(pickedUri: android.net.Uri?) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var prefs by remember { mutableStateOf<com.example.metaguardrail.data.UserPreferencesRepository?>(null) }
+    var consent by remember { mutableStateOf(false) }
+    var state by remember { mutableStateOf<com.example.metaguardrail.ai.VisualViolenceAssessment?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val r = com.example.metaguardrail.data.UserPreferencesRepository(ctx.applicationContext)
+        prefs = r
+        r.cloudImageAnalysisEnabled.collect { consent = it }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = "Cloud visual violence (LG4 via NVIDIA, temporary)", color = Color(0xFFE8EDF1), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+        Text(text = "OFF by default. When ON, your picked image is sent to NVIDIA's hosted trial (may be logged by provider). Use only non-sensitive public/synthetic images. Not private or zero-retention.", color = Color(0xFFFFB4B4), style = MaterialTheme.typography.labelSmall, lineHeight = 14.sp)
+        if (!consent) {
+            Text(text = "Cloud image analysis is OFF — enable in Settings > Privacy to allow one image upload.", color = Color(0xFF9AA6B2), style = MaterialTheme.typography.bodySmall)
+        } else {
+            Button(onClick = {
+                if (pickedUri == null || busy) return@Button
+                busy = true; state = null
+                scope.launch {
+                    val res = com.example.metaguardrail.ai.CloudVisualViolenceClassifier.assess(ctx, pickedUri) { consent }
+                    state = res; busy = false
+                }
+            }, enabled = !busy && pickedUri != null, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B7A8A))) {
+                Text(if (busy) "Checking cloud…" else "Check visual violence (cloud)", color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
+            state?.let { s ->
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF0C1117)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Cloud result: ${s.status}", color = Color(0xFFE8EDF1), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                    Text("Provider: ${s.provider} • ${s.modelName} • ${s.classificationMethod}", color = Color(0xFF9AA6B2), style = MaterialTheme.typography.labelSmall)
+                    s.sanitizedExplanation?.let { Text(it, color = Color(0xFFB4C0CB), style = MaterialTheme.typography.bodySmall, lineHeight = 16.sp) }
+                    s.errorCode?.let { Text("Error: $it", color = Color(0xFFFFB4B4), style = MaterialTheme.typography.labelSmall) }
+                }
+            }
         }
     }
 }

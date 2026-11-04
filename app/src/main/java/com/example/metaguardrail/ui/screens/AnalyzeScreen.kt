@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.metaguardrail.data.ActivityEvent
 import com.example.metaguardrail.data.AnalysisResult
+import com.example.metaguardrail.ai.ContextAwareSafetyEngine
 import com.example.metaguardrail.data.ContentSafetyAnalyzer
 import com.example.metaguardrail.data.LinkSafetyAnalyzer
 import com.example.metaguardrail.data.LinkSafetyResult
@@ -159,6 +160,7 @@ private fun TextAnalyzeSection(
     var isChecking by remember { mutableStateOf(false) }
     var reported by remember { mutableStateOf(false) }
     val analyzer = remember { ContentSafetyAnalyzer() }
+    val contextEngine = remember { ContextAwareSafetyEngine() }
     androidx.compose.runtime.LaunchedEffect(initialText) { if (initialText.isNotBlank()) { textInput = initialText; onConsumed() } }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -188,14 +190,12 @@ private fun TextAnalyzeSection(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Button(
+                    Button(
                 onClick = {
                     if (textInput.isBlank()) return@Button
                     isChecking = true
                     scope.launch {
-                        val res = withContext(Dispatchers.Default) {
-                            analyzer.analyzeContent(textInput, settings)
-                        }
+                        val res = withContext(Dispatchers.Default) { contextEngine.analyzeSync(textInput, settings) }
                         result = res
                         isChecking = false
                         onAddEvent(

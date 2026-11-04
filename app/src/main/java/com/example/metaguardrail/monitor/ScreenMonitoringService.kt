@@ -36,6 +36,7 @@ import androidx.core.app.NotificationCompat
 import com.example.metaguardrail.MainActivity
 import com.example.metaguardrail.R
 import com.example.metaguardrail.ai.BackendProxyConfig
+import com.example.metaguardrail.ai.ContextAwareSafetyEngine
 import com.example.metaguardrail.ai.MuseSparkRepository
 import com.example.metaguardrail.data.ContentSafetyAnalyzer
 import com.example.metaguardrail.data.SafetyCategory
@@ -54,7 +55,8 @@ import kotlinx.coroutines.launch
 /** User-started screen text scan. Frames are processed on-device and are not saved. */
 class ScreenMonitoringService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val analyzer = ContentSafetyAnalyzer()
+    private val localAnalyzer = ContentSafetyAnalyzer()
+    private val analyzer = ContextAwareSafetyEngine(localAnalyzer)
     private var recognizer: TextRecognizer? = null
     private var teluguRecognizer: TeluguTextRecognizer? = null
     private var visualClassifier: VisualContentClassifier? = null
@@ -109,7 +111,7 @@ class ScreenMonitoringService : Service() {
         serviceScope.launch {
             try {
                 val svc = BackendProxyConfig.createMuseService()
-                val repo = MuseSparkRepository(svc, analyzer, isCloudTextAnalysisAllowed = { cloudTextAnalysisEnabled })
+                val repo = MuseSparkRepository(svc, localAnalyzer, isCloudTextAnalysisAllowed = { cloudTextAnalysisEnabled })
                 val res = repo.analyzeWithMuse(text.take(2000), settings)
                 if (res.isSuccess) {
                     val m = res.getOrThrow()
@@ -368,7 +370,7 @@ class ScreenMonitoringService : Service() {
                         maybeAnalyzeWithMuse(combinedText, settings)
                     }
 
-                    val result = analyzer.analyzeContent(combinedText, settings)
+                    val result = analyzer.analyzeSync(combinedText, settings)
                     if (result.isFlagged) {
                         cleanFrameCount = 0
                         val category = result.categoryMatched?.label ?: "safety concern"
@@ -626,7 +628,7 @@ class ScreenMonitoringService : Service() {
 
     private fun checkSpeechTranscript(text: String) {
         if (foregroundPackage !in AUDIO_CAPTURE_PACKAGES) return
-        val result = analyzer.analyzeContent(text, settings)
+        val result = localAnalyzer.analyzeContent(text, settings)
         val category = if (result.isFlagged) {
             result.categoryMatched?.label ?: "safety concern"
         } else {

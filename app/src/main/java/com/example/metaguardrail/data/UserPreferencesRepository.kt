@@ -206,6 +206,14 @@ class UserPreferencesRepository(context: Context) {
         dataStore.edit { preferences -> preferences[Keys.cloudTextAnalysisEnabled] = enabled }
     }
 
+    val cloudImageAnalysisEnabled: Flow<Boolean> = dataStore.data
+        .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
+        .map { preferences -> preferences[Keys.cloudImageAnalysisEnabled] ?: false }
+
+    suspend fun setCloudImageAnalysisEnabled(enabled: Boolean) {
+        dataStore.edit { preferences -> preferences[Keys.cloudImageAnalysisEnabled] = enabled }
+    }
+
     // Phase 3: Safety incident notification preferences — OFF by default
     val notifyHighRisk: Flow<Boolean> = dataStore.data
         .catch { error -> if (error is IOException) emit(emptyPreferences()) else throw error }
@@ -259,6 +267,7 @@ class UserPreferencesRepository(context: Context) {
         val notifyWarning = booleanPreferencesKey("notify_warning")
         val notifiedIds = stringSetPreferencesKey("notified_incident_ids")
         val cloudTextAnalysisEnabled = booleanPreferencesKey("cloud_text_analysis_enabled")
+        val cloudImageAnalysisEnabled = booleanPreferencesKey("cloud_image_analysis_enabled")
     }
 
     companion object {

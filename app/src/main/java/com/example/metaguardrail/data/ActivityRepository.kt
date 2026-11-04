@@ -67,7 +67,9 @@ class ActivityRepository(context: Context) {
                             explanation = obj.optString("explanation", ""),
                             confidence = if (obj.has("confidence") && !obj.isNull("confidence"))
                                 obj.optDouble("confidence", Double.NaN).let { if (it.isNaN()) null else it.toFloat() }
-                            else null
+                            else null,
+                            classificationMethod = obj.optString("classificationMethod", null).takeIf { it?.isNotBlank() == true },
+                            modelVersion = obj.optString("modelVersion", null).takeIf { it?.isNotBlank() == true }
                         )
                     )
                 }
@@ -89,6 +91,8 @@ class ActivityRepository(context: Context) {
             obj.put("source", e.source.name)
             obj.put("explanation", e.explanation)
             if (e.confidence != null) obj.put("confidence", e.confidence.toDouble()) else obj.put("confidence", JSONObject.NULL)
+            if (e.classificationMethod != null) obj.put("classificationMethod", e.classificationMethod)
+            if (e.modelVersion != null) obj.put("modelVersion", e.modelVersion)
             arr.put(obj)
         }
         return arr.toString()

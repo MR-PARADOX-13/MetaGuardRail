@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
             val notifyHighRisk by preferencesRepository.notifyHighRisk.collectAsState(initial = false)
             val notifyWarning by preferencesRepository.notifyWarning.collectAsState(initial = false)
             val cloudTextAnalysisEnabled by preferencesRepository.cloudTextAnalysisEnabled.collectAsState(initial = false)
+            val cloudImageAnalysisEnabled by preferencesRepository.cloudImageAnalysisEnabled.collectAsState(initial = false)
             val pendingIncident by pendingIncidentId
             val scope = rememberCoroutineScope()
             var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -243,6 +244,8 @@ class MainActivity : ComponentActivity() {
                                 onNotifyWarningChange = { v -> scope.launch { preferencesRepository.setNotifyWarning(v) } },
                                 cloudTextAnalysisEnabled = cloudTextAnalysisEnabled,
                                 onCloudTextAnalysisChange = { v -> scope.launch { preferencesRepository.setCloudTextAnalysisEnabled(v) } },
+                                cloudImageAnalysisEnabled = cloudImageAnalysisEnabled,
+                                onCloudImageAnalysisChange = { v -> scope.launch { preferencesRepository.setCloudImageAnalysisEnabled(v) } },
                                 activityEvents = activityEvents
                             )
                         }

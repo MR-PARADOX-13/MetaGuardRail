@@ -63,6 +63,8 @@ fun SettingsScreen(
     onNotifyWarningChange: ((Boolean) -> Unit)? = null,
     cloudTextAnalysisEnabled: Boolean = false,
     onCloudTextAnalysisChange: ((Boolean) -> Unit)? = null,
+    cloudImageAnalysisEnabled: Boolean = false,
+    onCloudImageAnalysisChange: ((Boolean) -> Unit)? = null,
     activityEvents: List<ActivityEvent> = emptyList()
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -155,9 +157,16 @@ fun SettingsScreen(
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(modifier = Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(text = "Cloud Text Analysis", color = scheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            Text(text = "When ON, OCR-derived text from your screen is sent to the Muse Spark backend for AI safety review. When OFF (default), all checks stay on-device. Disabling keeps analysis fully on-device.", color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 14.sp)
+                            Text(text = "When ON, OCR-derived text from your screen is sent to the Muse Spark backend for AI safety review. When OFF (default), all checks stay on-device.", color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 14.sp)
                         }
                         Switch(checked = cloudTextAnalysisEnabled, onCheckedChange = { onCloudTextAnalysisChange?.invoke(it) })
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(text = "Cloud Image Analysis", color = scheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = "When ON, images may be sent for cloud multimodal review. OFF by default — no images leave device. Independent from Cloud Text Analysis.", color = scheme.onSurfaceVariant, fontSize = 11.sp, lineHeight = 14.sp)
+                        }
+                        Switch(checked = cloudImageAnalysisEnabled, onCheckedChange = { onCloudImageAnalysisChange?.invoke(it) })
                     }
                 }
             }
@@ -165,7 +174,7 @@ fun SettingsScreen(
             GuardRailCard {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(text = "Export & share activity", color = scheme.onSurface, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text(text = "Exports contain user-derived text and safety labels from your activity history. Only share with someone you trust. You can disable Cloud Text Analysis above to keep analysis fully on-device.", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, lineHeight = 16.sp)
+                    Text(text = "Exports contain user-derived text and safety labels from your activity history. Only share with someone you trust.", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, lineHeight = 16.sp)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedButton(onClick = { exportLauncher.launch(ReportExporter.suggestedFileName()) }, modifier = Modifier.weight(1f)) { Text(text = "Export JSON", fontSize = 12.sp) }
                         OutlinedButton(onClick = { confirmShareSettings = true }, modifier = Modifier.weight(1f)) { Text(text = "Share report", fontSize = 12.sp) }
@@ -210,7 +219,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { confirmShareSettings = false },
             title = { Text("Share activity report?", fontWeight = FontWeight.SemiBold) },
-            text = { Text("This report contains user-derived text and safety labels from your activity history. Only share with someone you trust. The recipient will be able to see the content of flagged events.", style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp) },
+            text = { Text("This report contains user-derived text and safety labels from your activity history. Only share with someone you trust.", style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmShareSettings = false
