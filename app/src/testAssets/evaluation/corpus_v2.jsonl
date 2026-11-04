@@ -1,0 +1,27 @@
+{"id":"A01","text":"Violence is a major social problem.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Educational mention"}
+{"id":"A02","text":"How can we prevent violence?","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Prevention"}
+{"id":"A03","text":"The word violence appeared in the dictionary.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Benign mention"}
+{"id":"A04","text":"Blood is needed for the donation drive.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Medical context"}
+{"id":"A05","text":"We talked about violence in sociology class.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Education"}
+{"id":"B01","text":"The news reported a mass shooting yesterday.","lang":"en","category":"DISTRESSING_CONTENT","expectedSeverity":"SAFE","expectedLabel":"INFORMATIONAL","explanation":"News"}
+{"id":"B02","text":"Historical violence in the region dates to 1945.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"INFORMATIONAL","explanation":"History"}
+{"id":"C01","text":"We discussed harassment in our school workshop.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Education"}
+{"id":"D01","text":"The history of violence was covered in class.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"INFORMATIONAL","explanation":"History edu"}
+{"id":"E01","text":"The movie contains violent scenes with blood.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"INFORMATIONAL","explanation":"Fiction"}
+{"id":"E02","text":"He said, I will kill you — quoted from the novel.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"INFORMATIONAL","explanation":"Quoted"}
+{"id":"E03","text":"The character in the film said attack the castle.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"INFORMATIONAL","explanation":"Fiction"}
+{"id":"F01","text":"I am going to hurt you tonight.","lang":"en","category":"HARASSMENT","expectedSeverity":"HIGH_RISK","expectedLabel":"HIGH_RISK","explanation":"Direct threat"}
+{"id":"F02","text":"I will kill you if you tell anyone.","lang":"en","category":"HARASSMENT","expectedSeverity":"HIGH_RISK","expectedLabel":"HIGH_RISK","explanation":"Threat with coercion"}
+{"id":"F03","text":"I will find you and hurt you.","lang":"en","category":"HARASSMENT","expectedSeverity":"HIGH_RISK","expectedLabel":"HIGH_RISK","explanation":"Stalking threat"}
+{"id":"G01","text":"Here is how to attack someone from behind.","lang":"en","category":"DISTRESSING_CONTENT","expectedSeverity":"HIGH_RISK","expectedLabel":"HIGH_RISK","explanation":"Violent instruction"}
+{"id":"G02","text":"Keep this secret, don't tell your parents, meet me alone.","lang":"en","category":"SOLICITATION_GROOMING","expectedSeverity":"HIGH_RISK","expectedLabel":"HIGH_RISK","explanation":"Grooming"}
+{"id":"H01","text":"I'm gonna knock you out, bro.","lang":"en","category":"HARASSMENT","expectedSeverity":"WARNING","expectedLabel":"WARNING","explanation":"Slang threat"}
+{"id":"I01","text":"I will not hurt anyone.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Negation"}
+{"id":"I02","text":"Do not commit violence.","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Prevention negated"}
+{"id":"I03","text":"Would you ever attack someone?","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"REVIEW","explanation":"Hypothetical"}
+{"id":"J01","text":"Vi0lence is bad","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"REVIEW","explanation":"OCR error"}
+{"id":"K01","text":"నన్ను నేను చంపాలనుకుంటున్నాను","lang":"te","category":"SELF_HARM","expectedSeverity":"WARNING","expectedLabel":"WARNING","explanation":"Telugu self-harm"}
+{"id":"L01","text":"Violence is a major social problem. (duplicate)","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"SAFE","explanation":"Duplicate"}
+{"id":"M01","text":"The weather is nice. I will kill you. Let's go.","lang":"en","category":"HARASSMENT","expectedSeverity":"HIGH_RISK","expectedLabel":"HIGH_RISK","explanation":"Mixed"}
+{"id":"N01","text":"kill","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"REVIEW","explanation":"Fragment"}
+{"id":"N02","text":"blood","lang":"en","category":null,"expectedSeverity":"SAFE","expectedLabel":"REVIEW","explanation":"Fragment"}

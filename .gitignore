@@ -4,6 +4,8 @@
 .kotlin/
 **/build/
 /local.properties
+local-proxy/.env
+local-proxy/node_modules/
 /.idea/caches/
 /.idea/libraries/
 /.idea/modules.xml
@@ -24,3 +26,7 @@ keystore.properties
 /captures/
 .externalNativeBuild
 .cxx
+
+# Python cache
+__pycache__/
+*.py[cod]

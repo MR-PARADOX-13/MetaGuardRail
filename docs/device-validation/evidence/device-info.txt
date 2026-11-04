@@ -1,0 +1,15 @@
+=== Device information ===
+Date: 2026-11-04T20:39:05+05:30
+
+Manufacturer: vivo
+Model: I2214
+Android: 16 SDK 36
+ABI: arm64-v8a
+WM size: Physical size: 1080x2400
+WM density: Physical density: 440
+Override density: 396
+Device: PD2238F_EX_A_16.3.15.0.W30
+
+List of devices attached
+10BD1Q17YN0005J        device usb:3-3 product:I2214 model:I2214 device:I2214 transport_id:1
+
