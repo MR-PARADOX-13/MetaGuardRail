@@ -26,3 +26,7 @@ keystore.properties
 /captures/
 .externalNativeBuild
 .cxx
+
+# Python cache
+__pycache__/
+*.py[cod]
